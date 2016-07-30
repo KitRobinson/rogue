@@ -29,7 +29,7 @@ def handle_keys():
 	if libtcod.console_is_key_pressed(libtcod.KEY_UP):
 		playery -= 1
 	elif libtcod.console_is_key_pressed(libtcod.KEY_DOWN):
-		playery +- 1
+		playery += 1
 	elif libtcod.console_is_key_pressed(libtcod.KEY_LEFT):
 		playerx -= 1
 	elif libtcod.console_is_key_pressed(libtcod.KEY_RIGHT):
@@ -37,11 +37,11 @@ def handle_keys():
 
 while not libtcod.console_is_window_closed():
 	libtcod.console_set_default_foreground(0, libtcod.white)
-	libtcod.console_put_char(0,1,1, '@', libtcod.BKGND_NONE)
+	libtcod.console_put_char(0, playerx, playery, '@', libtcod.BKGND_NONE)
 
 	libtcod.console_flush()
-
 	#handle kepress, exit game if needed
+	libtcod.console_put_char(0, playerx, playery, ' ', libtcod.BKGND_NONE)
 	exit = handle_keys()
 	if exit:
 		break
