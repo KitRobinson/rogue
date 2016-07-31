@@ -72,6 +72,7 @@ def make_map():
 	room2 = Rect(50,15,10,15)
 	create_room(room1)
 	create_room(room2)
+	create_h_tunnel(23,57,22)
 
 def create_room(room):
 	global map
@@ -80,6 +81,20 @@ def create_room(room):
 		for y in range(room.y1 + 1, room.y2):
 			map[x][y].blocked = False
 			map[x][y].block_sight = False
+
+def create_h_tunnel(x1, x2, y):
+	global map
+	#dig a horizontal tunnel from x1 to x2 at height y
+	for x in range(min(x1,x2),max(x1,x2)):
+		map[x][y].blocked = False
+		map[x][y].block_sight = False
+
+def create_v_tunnel(y1, y2, x):
+	global map
+	#dig a horizontal tunnel from x1 to x2 at height y
+	for y in range(min(y1,y2),max(y1,y2)):
+		map[x][y].blocked = False
+		map[x][y].block_sight = False
 
 def render_all():
 	global color_light_wall
