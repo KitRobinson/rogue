@@ -15,6 +15,7 @@ MAP_HEIGHT = 45
 ROOM_MAX_SIZE = 10
 ROOM_MIN_SIZE = 6
 MAX_ROOMS = 30
+MAX_ROOM_MONSTERS = 3
 
 #Field of view constants
 FOV_ALGO = 0
@@ -138,6 +139,7 @@ def make_map():
 					create_v_tunnel(prev_y, new_y, prev_x)
 
 			#once a valid room is drawn and connected, store it in rooms and move on to the next
+			place_objects(new_room)
 			rooms.append(new_room)
 			num_rooms += 1
 
@@ -197,7 +199,23 @@ def render_all():
 	#blit the contents
 	libtcod.console_blit(con, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, 0)
 
+def place_objects(room):
+	#choose random number of monsters
+	num_monsters = libtcod.random_get_int(0,0,MAX_ROOM_MONSTERS)
 
+	for i in range(num_monsters):
+		#choose random spot for this monster
+		x = libtcod.random_get_int(0, room.x1, room.x2)
+		y = libtcod.random_get_int(0, room.y1, room.y2)
+
+		if libtcod.random_get_int(0,0,100) < 80:
+			#80% chance of orc
+			monster = Object(x,y,'o', libtcod.desaturated_green)
+		else:
+			#create a troll
+			monster = Object(x,y,'T', libtcod.darker_green)
+
+		objects.append(monster)
 
 def handle_keys():
 	"""Handle_keys reads keypresses from the player while in console mode"""
