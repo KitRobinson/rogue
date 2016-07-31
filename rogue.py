@@ -11,6 +11,11 @@ LIMIT_FPS = 20
 MAP_WIDTH = 80
 MAP_HEIGHT = 45
 
+#room constants
+ROOM_MAX_SIZE = 10
+ROOM_MIN_SIZE = 6
+MAX_ROOMS = 30
+
 #basic map colors
 color_dark_wall = libtcod.Color(0,0,100)
 color_dark_ground = libtcod.Color(50,50,150)
@@ -33,6 +38,17 @@ class Rect:
 		self.y1 = y
 		self.x2 = x + w
 		self.y2 = y + h
+	
+	def center(self):
+		center_x = ((self.x1 + self.x2) / 2)
+		center_y = ((self.y1 + self.y2) / 2)
+		return(center_x, center_y)
+
+
+	def intersect(self, other):
+		#returns true if this overlaps other
+		return (self.x1 <= other.x2 and self.y1 <= other.y2
+				and self.x2 >= other.x1 and self.y2 >= other.y1)
 
 class Object:
 	#this si a generic object
@@ -67,12 +83,54 @@ def make_map():
 		for y in range(MAP_HEIGHT) ]
 			for x in range(MAP_WIDTH) ]
 
-	#place 2 pillars for testing
-	room1 = Rect(20,15,10,15)
-	room2 = Rect(50,15,10,15)
-	create_room(room1)
-	create_room(room2)
-	create_h_tunnel(23,57,22)
+	#create random map by basic method
+	rooms = []
+	num_rooms = 0
+
+	for r in range(MAX_ROOMS):
+		#randome width and height
+		w = libtcod.random_get_int(0, ROOM_MIN_SIZE, ROOM_MAX_SIZE)
+		h = libtcod.random_get_int(0, ROOM_MIN_SIZE, ROOM_MAX_SIZE)
+		x = libtcod.random_get_int(0, 0, MAP_WIDTH - w - 1)
+		y = libtcod.random_get_int(0, 0, MAP_HEIGHT - h - 1)
+
+		#make a rect of each room
+		new_room = Rect(x,y,w,h)
+
+		#run through the previous room to make sure there is no intersecting
+		failed = False
+		for other_room in rooms:
+			if new_room.intersect(other_room):
+				failed = True
+				break		
+
+		if not failed:
+			#there are no bad intersections with other rooms
+			create_room(new_room)
+
+			(new_x, new_y) = new_room.center()
+
+			if num_rooms == 0:
+				#the player starts in the first room!
+				player.x = new_x
+				player.y = new_y
+			else:
+				# if it is not first, connect to previous with a tunnel
+
+				(prev_x, prev_y) = rooms[num_rooms-1].center()
+
+
+				if libtcod.random_get_int(0, 0, 1) == 1:
+					print (prev_x, new_x, prev_y)
+					create_h_tunnel(prev_x, new_x, prev_y)
+					create_v_tunnel(prev_y, new_y, new_x)
+				else:
+					create_h_tunnel(prev_x, new_x, new_y)
+					create_v_tunnel(prev_y, new_y, prev_x)
+
+			#once a valid room is drawn and connected, store it in rooms and move on to the next
+			rooms.append(new_room)
+			num_rooms += 1
 
 def create_room(room):
 	global map
