@@ -16,17 +16,24 @@ ROOM_MAX_SIZE = 10
 ROOM_MIN_SIZE = 6
 MAX_ROOMS = 30
 
+#Field of view constants
+FOV_ALGO = 0
+FOV_LIGHT_WALLS = True
+TORCH_RADIUS = 10
+
+
 #basic map colors
 color_dark_wall = libtcod.Color(0,0,100)
 color_dark_ground = libtcod.Color(50,50,150)
-
+color_light_wall = libtcod.Color(130,110,50)
+color_light_ground = libtcod.Color(200,180,50)
 
 
 class Tile:
 	#a tile of the map and its properties
 	def __init__(self, blocked, block_sight = None):
 		self.blocked = blocked
-
+		self.explored = False
 		#by default, fif a tile is blocked, it also blocks sight
 		if block_sight is None: block_sight = blocked
 		self.block_sight = block_sight
@@ -66,9 +73,11 @@ class Object:
 			self.y += dy
 
 	def draw(self):
-		#set the color and draw the character
-		libtcod.console_set_default_foreground(con, self.color)
-		libtcod.console_put_char(con, self.x, self.y, self.char , libtcod.BKGND_NONE)
+		#if the object is in FOV
+		if libtcod.map_is_in_fov(fov_map, self.x, self.y):
+			#set the color and draw the character
+			libtcod.console_set_default_foreground(con, self.color)
+			libtcod.console_put_char(con, self.x, self.y, self.char , libtcod.BKGND_NONE)
 
 	def clear(self):
 		#erase the character that represents this object
@@ -150,22 +159,36 @@ def create_h_tunnel(x1, x2, y):
 def create_v_tunnel(y1, y2, x):
 	global map
 	#dig a horizontal tunnel from x1 to x2 at height y
-	for y in range(min(y1,y2),max(y1,y2)):
+	for y in range(min(y1,y2),max(y1,y2)+1):
 		map[x][y].blocked = False
 		map[x][y].block_sight = False
 
 def render_all():
 	global color_light_wall
 	global color_light_ground
+	global fov_map
+	global fob_recompute
 
+	#recompute FOV if needed (the player moved or something)
+	fov_recompute = False
+	libtcod.map_compute_fov(fov_map, player.x, player.y, TORCH_RADIUS, FOV_LIGHT_WALLS, FOV_ALGO)
 	#set background colors for all tiles
 	for y in range(MAP_HEIGHT):
 		for x in range(MAP_WIDTH):
+			visible = libtcod.map_is_in_fov(fov_map, x, y)
 			wall = map[x][y].block_sight
-			if wall:
-				libtcod.console_set_char_background(con, x, y, color_dark_wall, libtcod.BKGND_SET )
+			if not visible:
+				if map[x][y].explored:
+					if wall:
+						libtcod.console_set_char_background(con, x, y, color_dark_wall, libtcod.BKGND_SET )
+					else:
+						libtcod.console_set_char_background(con, x, y, color_dark_ground, libtcod.BKGND_SET )
 			else:
-				libtcod.console_set_char_background(con, x, y, color_dark_ground, libtcod.BKGND_SET )
+				if wall:
+					libtcod.console_set_char_background(con, x, y, color_light_wall, libtcod.BKGND_SET )
+				else:
+					libtcod.console_set_char_background(con, x, y, color_light_ground, libtcod.BKGND_SET )
+				map[x][y].explored = True
 	
 	#draw all objects in the list
 	for object in objects:
@@ -181,7 +204,8 @@ def handle_keys():
 
 	#no longer required with creation of player object
 #	global playerx, playery
-
+	global fov_map
+	global fov_recompute
 	#wait for keypress makes us turn based
 	key = libtcod.console_wait_for_keypress(True)
 
@@ -196,12 +220,16 @@ def handle_keys():
 	#movement keys
 	if libtcod.console_is_key_pressed(libtcod.KEY_UP):
 		player.move(0,-1)
+		fov_recompute = True
 	elif libtcod.console_is_key_pressed(libtcod.KEY_DOWN):
 		player.move(0,1)
+		fov_recompute = True
 	elif libtcod.console_is_key_pressed(libtcod.KEY_LEFT):
 		player.move(-1,0)
+		fov_recompute = True
 	elif libtcod.console_is_key_pressed(libtcod.KEY_RIGHT):
 		player.move(1,0)
+		fov_recompute = True
 
 ########################################################
 # INITIALIZATION AND MAIN LOOP
@@ -218,6 +246,12 @@ objects = [npc, player]
 
 #generate starting map
 make_map()
+
+fov_map = libtcod.map_new(MAP_WIDTH, MAP_HEIGHT)
+for y in range(MAP_HEIGHT):
+	for x in range(MAP_WIDTH):
+		libtcod.map_set_properties(fov_map, x, y, not map[x][y].block_sight, not map[x][y].blocked)
+fov_recompute = False
 
 while not libtcod.console_is_window_closed():
 
