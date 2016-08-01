@@ -1,5 +1,5 @@
 import libtcodpy as libtcod
-
+import math
 #size of window
 SCREEN_WIDTH = 80
 SCREEN_HEIGHT = 50
@@ -61,22 +61,92 @@ class Rect:
 		return (self.x1 <= other.x2 and self.y1 <= other.y2
 				and self.x2 >= other.x1 and self.y2 >= other.y1)
 
+class Fighter:
+	#combat related properties and methods (monster, player, npc)
+	def __init__(self, hp, defense, power, death_function=None):
+		self.max_hp = hp
+		self.hp = hp
+		self.defense = defense
+		self.power = power
+		self.death_function = death_function
+
+	def take_damage(self, damage):
+		#apply damage if possible
+		if damage > 0:
+			self.hp -= damage
+		if self.hp <= 0:
+			function = self.death_function
+			if function is not None:
+				function(self.owner)
+
+	def attack(self, target):
+		#a very simple formula for attack damage
+		damage = self.power - target.fighter.defense
+
+		if damage > 0:
+			#make the target take some damage!
+			print self.owner.name.capitalize() + ' attacks ' + target.name.capitalize() +' for ' + str(damage) + ' damage!'
+			target.fighter.take_damage(damage)
+		else:
+			print self.owner.name.capitalize() + ' attacks ' + target.name.capitalize() + ' but has no effect!'
+
+
+class BasicMonster:
+	#AI for most basic monstere turn
+	def take_turn(self):
+		#a basic monster takes its turn.  if you can see it, it can see you
+		monster = self.owner
+		if libtcod.map_is_in_fov(fov_map, monster.x, monster.y):
+
+			#move towards the player if far away
+			if monster.distance_to(player) >= 2:
+				monster.move_towards(player.x, player.y)
+
+			#attack if adjacent
+			elif player.fighter.hp > 0:
+				monster.fighter.attack(player)
+
 class Object:
 	#this si a generic object
 	#it is always represented by a character on the screen
-	def __init__(self, x, y, char, name, color, blocks=False):
+	def __init__(self, x, y, char, name, color, blocks=False, fighter=None, ai=None):
 		self.x = x
 		self.y = y
 		self.char = char
 		self.name = name
 		self.color = color
 		self.blocks = blocks
+		self.fighter = fighter
+		if self.fighter:
+			self.fighter.owner = self
+		self.ai = ai
+		if self.ai:
+			self.ai.owner = self
 
 	def move(self, dx, dy):
 		#move by the given amount
 		if not is_blocked(self.x + dx, self.y + dy):
 			self.x += dx
 			self.y += dy
+
+	def move_towards(self, target_x, target_y):
+		#vector from this object toe the target, and distance
+		dx = target_x - self.x
+		dy = target_y - self.y
+		distance = math.sqrt(dx ** 2 + dy ** 2)
+
+		#normalse it to lenght 1 (preserving direction), then round it and 
+		#conver to integer so the movement is restircted to the map grid
+		dx = int(round(dx/distance))
+		dy = int(round(dy/distance))
+		self.move(dx, dy)
+
+
+	def distance_to(self, other):
+		#return the distance to another object
+		dx = other.x - self.x
+		dy = other.y - self.y
+		return math.sqrt(dx ** 2 + dy ** 2)
 
 	def draw(self):
 		#if the object is in FOV
@@ -198,13 +268,13 @@ def player_move_or_attack(dx, dy):
 	#try to find an attackable object there
 	target = None
 	for object in objects:
-		if object.x == x and object.y == y:
+		if object.x == x and object.y == y and object.fighter:
 			target = object
 			break
 
 	#attack if target found
 	if target is not None:
-		print 'The ' + target.name + ' laughs at your puny attempt to attack'
+		player.fighter.attack(target)
 	else:	
 		player.move(dx,dy)
 		fov_recompute = True
@@ -215,6 +285,9 @@ def render_all():
 	global color_light_ground
 	global fov_map
 	global fob_recompute
+	#show the player's stats
+	libtcod.console_set_default_foreground(con, libtcod.white)
+	libtcod.console_print_ex(con, 1, SCREEN_HEIGHT-1, libtcod.BKGND_NONE, libtcod.LEFT, 'HP: ' +  str(player.fighter.hp) + '/' + str(player.fighter.max_hp))
 
 	#recompute FOV if needed (the player moved or something)
 	fov_recompute = False
@@ -255,10 +328,14 @@ def place_objects(room):
 		if not is_blocked(x,y):
 			if libtcod.random_get_int(0,0,100) < 80:
 				#80% chance of orc
-				monster = Object(x, y, 'o', 'Orc', libtcod.desaturated_green, blocks=True)
+				fighter_component = Fighter(hp=10, defense=0, power=3, death_function=monster_death)
+				ai_component = BasicMonster()
+				monster = Object(x, y, 'o', 'Orc', libtcod.desaturated_green, blocks=True, fighter=fighter_component, ai=ai_component)
 			else:
 				#create a troll
-				monster = Object(x, y,'T', 'Troll', libtcod.darker_green, blocks=True)
+				fighter_component = Fighter(hp=16, defense=1, power=4, death_function=monster_death)
+				ai_component = BasicMonster()
+				monster = Object(x, y,'T', 'Troll', libtcod.darker_green, blocks=True, fighter=fighter_component, ai=ai_component)
 
 			objects.append(monster)
 
@@ -297,6 +374,25 @@ def handle_keys():
 		else:
 			return 'didnt-take-turn'
 
+def player_death(player):
+	#the game ended!
+	global game_state
+	print 'You Died!'
+	game_state = 'dead'
+
+	#for added affect, transform player into corpse
+	player.char = '%'
+	player.color = libtcod.dark_red
+
+def monster_death(monster):
+	#makes a corpse, which does not block move or attack
+	print monster.name.capitalize() + ' is dead!'
+	monster.char = '%'
+	monster.color = libtcod.dark_red
+	monster.blocks = False
+	monster.fighter = None
+	monster.ai = None
+	monster.name = 'remains of ' + monster.name
 ########################################################
 # INITIALIZATION AND MAIN LOOP
 ########################################################
@@ -306,9 +402,10 @@ libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'python/libtcod tutorial'
 con = libtcod.console_new(SCREEN_WIDTH, SCREEN_HEIGHT)
 
 #the coords here are the player starting location
-player = Object(25, 23, '@', 'Seth', libtcod.white, blocks=True)
+fighter_component = Fighter(hp=30, defense=2, power=5, death_function=player_death)
+player = Object(0, 0, '@', 'Seth', libtcod.white, blocks=True, fighter=fighter_component)
 npc = Object(SCREEN_WIDTH/2-5, SCREEN_HEIGHT/2, '&', 'Chuckes', libtcod.red, blocks=True)
-objects = [npc, player]
+objects = [player, npc]
 
 #generate starting map
 make_map()
@@ -343,5 +440,6 @@ while not libtcod.console_is_window_closed():
 	if game_state == 'playing' and player_action != 'didnt-take-turn':
 		for object in objects:
 			if object != player:
-				print 'The ' + object.name + ' growls!'
+				if object.ai:
+					object.ai.take_turn()
 
