@@ -9,7 +9,7 @@ LIMIT_FPS = 20
 
 #size of map
 MAP_WIDTH = 80
-MAP_HEIGHT = 45
+MAP_HEIGHT = 43
 
 #room constants
 ROOM_MAX_SIZE = 10
@@ -22,6 +22,10 @@ FOV_ALGO = 0
 FOV_LIGHT_WALLS = True
 TORCH_RADIUS = 10
 
+#bar constants
+BAR_WIDTH = 20
+PANEL_HEIGHT = 7
+PANEL_Y = SCREEN_HEIGHT - PANEL_HEIGHT
 
 #basic map colors
 color_dark_wall = libtcod.Color(0,0,100)
@@ -122,6 +126,12 @@ class Object:
 		self.ai = ai
 		if self.ai:
 			self.ai.owner = self
+
+	def send_to_back(self):
+		global objects
+		objects.remove(self)
+		objects.insert(0, self)
+
 
 	def move(self, dx, dy):
 		#move by the given amount
@@ -279,7 +289,6 @@ def player_move_or_attack(dx, dy):
 		player.move(dx,dy)
 		fov_recompute = True
 
-
 def render_all():
 	global color_light_wall
 	global color_light_ground
@@ -313,8 +322,13 @@ def render_all():
 	#draw all objects in the list
 	for object in objects:
 		object.draw()
-	
+	player.draw()
+	#display status bar
+	libtcod.console_set_default_background(panel, libtcod.black)
+	libtcod.console_clear(panel)
+	render_bar(1,1, BAR_WIDTH, 'HP', player.fighter.hp, player.fighter.max_hp, libtcod.light_red, libtcod.darker_red)
 	#blit the contents
+	libtcod.console_blit(panel,0,0, SCREEN_WIDTH, PANEL_HEIGHT, 0, 0, PANEL_Y)
 	libtcod.console_blit(con, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, 0)
 
 def place_objects(room):
@@ -393,13 +407,30 @@ def monster_death(monster):
 	monster.fighter = None
 	monster.ai = None
 	monster.name = 'remains of ' + monster.name
+	monster.send_to_back()
+
+def render_bar(x,y, total_width, name, value, maximum, bar_color, back_color):
+	#render a bar... first calculate it's width
+	bar_width = int(float(value) / maximum * total_width)
+	#then render background
+	libtcod.console_set_default_background(panel, back_color)
+	libtcod.console_rect(panel, x,y,total_width,1, False, libtcod.BKGND_SCREEN)
+	#then render bar on op
+	libtcod.console_set_default_background(panel, bar_color)
+	if bar_width > 0:
+		libtcod.console_rect(panel,x,y,bar_width,1,False,libtcod.BKGND_SCREEN)
+	#and put numerical representation as well
+	libtcod.console_set_default_foreground(panel, libtcod.white)
+	
+	#libtcod.console_print_ex(panel, x + total_width / 2, y, libtcod.BKGND_NONE, libtcod.CENTER, name + ': ' + str(value) + '/' + str(maximum))	
+
 ########################################################
 # INITIALIZATION AND MAIN LOOP
 ########################################################
 
 libtcod.console_set_custom_font('arial10x10.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
 libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'python/libtcod tutorial', False)
-con = libtcod.console_new(SCREEN_WIDTH, SCREEN_HEIGHT)
+con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
 
 #the coords here are the player starting location
 fighter_component = Fighter(hp=30, defense=2, power=5, death_function=player_death)
@@ -416,24 +447,19 @@ for y in range(MAP_HEIGHT):
 		libtcod.map_set_properties(fov_map, x, y, not map[x][y].block_sight, not map[x][y].blocked)
 fov_recompute = False
 
+panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
+
+#######################################################
+#     The Main Loop!
+#######################################################
 while not libtcod.console_is_window_closed():
 
 	#render the screen
 	render_all()
-
 	libtcod.console_flush()
-
 	#erase obj at old loc before they move
 	for object in objects:
 		object.clear()
-
-		# this bit no longer required with creation of render all
-	# libtcod.console_set_default_foreground(con, libtcod.white)
-	# libtcod.console_put_char(con, player.x, player.y, '@', libtcod.BKGND_NONE)
-	# libtcod.console_flush()
-
-	#handle kepress, exit game if needed
-
 	player_action = handle_keys()
 	if player_action == 'exit':
 		break
