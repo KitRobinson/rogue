@@ -367,13 +367,15 @@ def place_objects(room):
 
 def handle_keys():
 	"""Handle_keys reads keypresses from the player while in console mode"""
-
+	global key
 	#no longer required with creation of player object
 #	global playerx, playery
 	global fov_map
 	global fov_recompute
 	#wait for keypress makes us turn based
-	key = libtcod.console_wait_for_keypress(True)
+	
+	#this would be useful for a keyboard only game
+	#key = libtcod.console_wait_for_keypress(True)
 
 	#function keys
 	if key.vk == libtcod.KEY_ENTER and key.lalt:
@@ -385,20 +387,29 @@ def handle_keys():
 	
 	if game_state == 'playing':
 		#movement keys
-		if libtcod.console_is_key_pressed(libtcod.KEY_UP):
+		if key.vk == libtcod.KEY_UP:
 			player_move_or_attack(0,-1)
 			fov_recompute = True
-		elif libtcod.console_is_key_pressed(libtcod.KEY_DOWN):
+		elif key.vk == libtcod.KEY_DOWN:
 			player_move_or_attack(0,1)
 			fov_recompute = True
-		elif libtcod.console_is_key_pressed(libtcod.KEY_LEFT):
+		elif key.vk == libtcod.KEY_LEFT:
 			player_move_or_attack(-1,0)
 			fov_recompute = True
-		elif libtcod.console_is_key_pressed(libtcod.KEY_RIGHT):
+		elif key.vk == libtcod.KEY_RIGHT:
 			player_move_or_attack(1,0)
 			fov_recompute = True
 		else:
 			return 'didnt-take-turn'
+
+def get_names_under_mouse():
+	global mouse
+	#return a string with the names of all objects under the mouse
+	(x,y) = (mouse.cx, mouse.cy)
+	names = [obj.name for obj in objects
+		if obj.x == x and obj.y ==y and libtcod.map_is_in_fov(fov_map, obj.x, obj.y)]
+	names = ', '.join(names) #join the names, separated by commas
+	return names.capitalize()
 
 def player_death(player):
 	#the game ended!
@@ -424,6 +435,9 @@ def monster_death(monster):
 def render_bar(x,y, total_width, name, value, maximum, bar_color, back_color):
 	#render a bar... first calculate it's width
 	bar_width = int(float(value) / maximum * total_width)
+	#then render the names under the mouse
+	libtcod.console_set_default_foreground(panel, libtcod.light_grey)
+	libtcod.console_print_ex(panel, 1, 0, libtcod.BKGND_NONE, libtcod.LEFT, get_names_under_mouse())
 	#then render background
 	libtcod.console_set_default_background(panel, back_color)
 	libtcod.console_rect(panel, x,y,total_width,1, False, libtcod.BKGND_SCREEN)
@@ -454,7 +468,7 @@ def message(new_msg, color = libtcod.white):
 libtcod.console_set_custom_font('arial10x10.png', libtcod.FONT_TYPE_GREYSCALE | libtcod.FONT_LAYOUT_TCOD)
 libtcod.console_init_root(SCREEN_WIDTH, SCREEN_HEIGHT, 'python/libtcod tutorial', False)
 con = libtcod.console_new(MAP_WIDTH, MAP_HEIGHT)
-
+libtcod.sys_set_fps(LIMIT_FPS)
 #the coords here are the player starting location
 fighter_component = Fighter(hp=30, defense=2, power=5, death_function=player_death)
 player = Object(0, 0, '@', 'Seth', libtcod.white, blocks=True, fighter=fighter_component)
@@ -475,11 +489,16 @@ panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
 game_msgs = []
 
 message("Welcome stranger!  Prepare to perish in the Tombs of the Ancient Kings.", libtcod.red)
+
+mouse = libtcod.Mouse()
+key = libtcod.Key()
+
 #######################################################
 #     The Main Loop!
 #######################################################
 while not libtcod.console_is_window_closed():
 
+	libtcod.sys_check_for_event(libtcod.EVENT_KEY_PRESS|libtcod.EVENT_MOUSE, key, mouse)
 	#render the screen
 	render_all()
 	libtcod.console_flush()
