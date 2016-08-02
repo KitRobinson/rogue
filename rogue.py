@@ -1,5 +1,6 @@
 import libtcodpy as libtcod
 import math
+import textwrap
 #size of window
 SCREEN_WIDTH = 80
 SCREEN_HEIGHT = 50
@@ -26,6 +27,11 @@ TORCH_RADIUS = 10
 BAR_WIDTH = 20
 PANEL_HEIGHT = 7
 PANEL_Y = SCREEN_HEIGHT - PANEL_HEIGHT
+
+#message bar constants
+MSG_X = BAR_WIDTH + 2
+MSG_WIDTH = SCREEN_WIDTH - BAR_WIDTH -2
+MSG_HEIGHT = PANEL_HEIGHT -1
 
 #basic map colors
 color_dark_wall = libtcod.Color(0,0,100)
@@ -89,10 +95,10 @@ class Fighter:
 
 		if damage > 0:
 			#make the target take some damage!
-			print self.owner.name.capitalize() + ' attacks ' + target.name.capitalize() +' for ' + str(damage) + ' damage!'
+			message((self.owner.name.capitalize() + ' attacks ' + target.name.capitalize() +' for ' + str(damage) + ' damage!'), libtcod.white)
 			target.fighter.take_damage(damage)
 		else:
-			print self.owner.name.capitalize() + ' attacks ' + target.name.capitalize() + ' but has no effect!'
+			message((self.owner.name.capitalize() + ' attacks ' + target.name.capitalize() + ' but has no effect!'), libtcod.white)
 
 
 class BasicMonster:
@@ -234,7 +240,6 @@ def make_map():
 
 
 				if libtcod.random_get_int(0, 0, 1) == 1:
-					print (prev_x, new_x, prev_y)
 					create_h_tunnel(prev_x, new_x, prev_y)
 					create_v_tunnel(prev_y, new_y, new_x)
 				else:
@@ -326,6 +331,13 @@ def render_all():
 	#display status bar
 	libtcod.console_set_default_background(panel, libtcod.black)
 	libtcod.console_clear(panel)
+	# print the messages to the message panel
+	y = 1 
+	for (line, color) in game_msgs:
+		libtcod.console_set_default_foreground(panel, color)
+		libtcod.console_print_ex(panel, MSG_X, y, libtcod.BKGND_NONE, libtcod.LEFT, line)
+		y += 1
+
 	render_bar(1,1, BAR_WIDTH, 'HP', player.fighter.hp, player.fighter.max_hp, libtcod.light_red, libtcod.darker_red)
 	#blit the contents
 	libtcod.console_blit(panel,0,0, SCREEN_WIDTH, PANEL_HEIGHT, 0, 0, PANEL_Y)
@@ -391,7 +403,7 @@ def handle_keys():
 def player_death(player):
 	#the game ended!
 	global game_state
-	print 'You Died!'
+	message('You Died!', libtcod.red)
 	game_state = 'dead'
 
 	#for added affect, transform player into corpse
@@ -400,7 +412,7 @@ def player_death(player):
 
 def monster_death(monster):
 	#makes a corpse, which does not block move or attack
-	print monster.name.capitalize() + ' is dead!'
+	message(monster.name.capitalize() + ' is dead!', libtcod.green)
 	monster.char = '%'
 	monster.color = libtcod.dark_red
 	monster.blocks = False
@@ -424,6 +436,17 @@ def render_bar(x,y, total_width, name, value, maximum, bar_color, back_color):
 	
 	#libtcod.console_print_ex(panel, x + total_width / 2, y, libtcod.BKGND_NONE, libtcod.CENTER, name + ': ' + str(value) + '/' + str(maximum))	
 
+def message(new_msg, color = libtcod.white):
+	#plit the message if necessary, among multiple lines
+	new_msg_lines = textwrap.wrap(new_msg, MSG_WIDTH)
+
+	for line in new_msg_lines:
+		#iff the buffer is full remove the first line to make room for the new one
+		if len(game_msgs) == MSG_HEIGHT:
+			del game_msgs[0]
+
+		#add the new line as a tuple, with the text and the color
+		game_msgs.append( (line, color) )
 ########################################################
 # INITIALIZATION AND MAIN LOOP
 ########################################################
@@ -449,6 +472,9 @@ fov_recompute = False
 
 panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
 
+game_msgs = []
+
+message("Welcome stranger!  Prepare to perish in the Tombs of the Ancient Kings.", libtcod.red)
 #######################################################
 #     The Main Loop!
 #######################################################
