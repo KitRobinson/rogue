@@ -33,11 +33,12 @@ PANEL_Y = SCREEN_HEIGHT - PANEL_HEIGHT
 MSG_X = BAR_WIDTH + 2
 MSG_WIDTH = SCREEN_WIDTH - BAR_WIDTH -2
 MSG_HEIGHT = PANEL_HEIGHT -1
+INVENTORY_WIDTH = 50
 
 #spell constants
 LIGHTNING_DAMAGE = 20
 LIGHTNING_RANGE = 5
-
+HEAL_AMOUNT = 4
 
 #more constants
 INV_CAP = 26
@@ -109,6 +110,11 @@ class Fighter:
 		else:
 			message((self.owner.name.capitalize() + ' attacks ' + target.name.capitalize() + ' but has no effect!'), libtcod.white)
 
+	def heal(self, amount):
+		#heal by the given amount, without going over the max
+		self.hp += amount
+		if self.hp > self.max_hp:
+			self.hp = self.hp_max
 
 class BasicMonster:
 	#AI for most basic monstere turn
@@ -139,6 +145,20 @@ class Item:
 			inventory.append(self.owner)
 			objects.remove(self.owner)
 			message('you picked up a ' + self.owner.name + "!", libtcod.green)
+
+	def use(self):
+		#just call the use function if it is defined
+		if self.use_function is None:
+			message('The ' + self.owner.name + ' cannot be used.')
+		else:
+			if self.use_function() != 'cancelled':
+				inventory.remove(self.owner) # destroy after use, unless it was cancelled for some reason
+
+	def drop(self, x, y):
+		self.owner.x = x
+		self.owner.y = y
+		objects.append(self.owner)
+		inventory.remove(self.owner)
 
 class Object:
 	#this si a generic object
@@ -383,9 +403,11 @@ def render_all():
 
 def cast_heal():
 	if player.fighter.hp < player.fighter.max_hp:
-		player.fighter.hp += 10
-		if player.fighter.hp > player.fighter.max_hp:
-			player.fighter.hp == player.fighter.max_hp
+		message('Your wounds start to feel better!', libtcod.light_violet)
+		player.fighter.heal(HEAL_AMOUNT)
+	else:
+		message('You are already at full heath', libtcod.light_violet)
+		return 'cancelled'
 
 def cast_lightning():
 	#find closest enemy inside max range and damage it
@@ -393,7 +415,7 @@ def cast_lightning():
 	if monster is None: #no enemy found within max range
 		message('No emeny is close enough to strike', libtcod.red)
 		return 'cancelled'
-	message('A lightning bolt strikes the ' + monster.name + 'with a thunderous boom!  the damae is ' + str(LIGTHNING_DAMAGE) + ' hit points.', libtcod.light_blue)
+	message('A lightning bolt strikes the ' + monster.name + 'with a thunderous boom!  the damae is ' + str(LIGHTNING_DAMAGE) + ' hit points.', libtcod.light_blue)
 	monster.fighter.take_damage(LIGHTNING_DAMAGE)
 
 def place_objects(room):
@@ -441,6 +463,47 @@ def place_objects(room):
 				objects.append(item)
 				item.send_to_back
 
+def menu(header, options, width):
+	if len(options) > 26: raise ValueError('Cannot have a menu with more than 26 options')
+	#calculate total height for the header, and one line per option
+	header_height = libtcod.console_get_height_rect(con, 0, 0, width, SCREEN_HEIGHT, header)
+	height = len(options) + header_height
+	#create off-screen console that represeents menu's window
+	window = libtcod.console_new(width, height)
+	#print the header, with auto-wrap
+	libtcod.console_set_default_foreground(window, libtcod.white)
+	libtcod.console_print_rect_ex(window, 0, 0, width, height, libtcod.BKGND_NONE, libtcod.LEFT, header)
+	#print each option
+	y = header_height
+	letter_index = ord('a')
+	for option_text in options:
+		text = '(' + chr(letter_index) + ')' + option_text
+		libtcod.console_print_ex(window, 0, y, libtcod.BKGND_NONE, libtcod.LEFT, text)
+		y += 1
+		letter_index += 1
+	#blit the contents of window to the root console
+	x = SCREEN_WIDTH/2 - width/2
+	y = SCREEN_HEIGHT/2 - height/2
+	libtcod.console_blit(window, 0, 0, width, height, 0, x, y, 1.0, 0.7)
+	#present the root console to the player and wait for a key-press
+	libtcod.console_flush()
+	key = libtcod.console_wait_for_keypress(True)
+	index = key.c - ord('a')
+	if index >= 0 and index < len(options): return index
+	return None
+
+
+def inventory_menu(header):
+	#show a menu with each itme of the inventory as an option
+	if len(inventory) == 0:
+		options = ["inventory is empty."]
+	else:
+		options = [item.name for item in inventory]
+
+	index = menu(header, options, INVENTORY_WIDTH)
+	if index is None or len(inventory) == 0: return None
+	return inventory[index].item
+
 def handle_keys():
 	"""Handle_keys reads keypresses from the player while in console mode"""
 	global key
@@ -485,6 +548,15 @@ def handle_keys():
 					if object.x == player.x and object.y == player.y and object.item:
 						object.item.pick_up()
 						break
+			if key_char == 'i':
+				chosen_item = inventory_menu('press the key next to an item to use it, or any other key to cancel.\n')
+				if chosen_item is not None:
+					chosen_item.use()
+
+			if key_char == 'd':
+				chosen_item = inventory_menu('ress the key next to the item to drop, or any other key to cancel\n')
+				if chosen_item is not None:
+					chosen_item.drop(player.x, player.y)
 
 			return 'didnt-take-turn'
 
