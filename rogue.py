@@ -17,6 +17,7 @@ ROOM_MAX_SIZE = 10
 ROOM_MIN_SIZE = 6
 MAX_ROOMS = 30
 MAX_ROOM_MONSTERS = 3
+MAX_ROOM_ITEMS = 2
 
 #Field of view constants
 FOV_ALGO = 0
@@ -32,6 +33,14 @@ PANEL_Y = SCREEN_HEIGHT - PANEL_HEIGHT
 MSG_X = BAR_WIDTH + 2
 MSG_WIDTH = SCREEN_WIDTH - BAR_WIDTH -2
 MSG_HEIGHT = PANEL_HEIGHT -1
+
+#spell constants
+LIGHTNING_DAMAGE = 20
+LIGHTNING_RANGE = 5
+
+
+#more constants
+INV_CAP = 26
 
 #basic map colors
 color_dark_wall = libtcod.Color(0,0,100)
@@ -116,10 +125,25 @@ class BasicMonster:
 			elif player.fighter.hp > 0:
 				monster.fighter.attack(player)
 
+class Item:
+
+	def __init__(self, use_function=None):
+		self.use_function=use_function
+
+	#an item that can be picked up and used
+	def pick_up(self):
+	#add to players inventory and remove from map
+		if len(inventory) >= INV_CAP:
+			message('your inventory is full!  did not pick up' + self.owner.name + '.')			
+		else:
+			inventory.append(self.owner)
+			objects.remove(self.owner)
+			message('you picked up a ' + self.owner.name + "!", libtcod.green)
+
 class Object:
 	#this si a generic object
 	#it is always represented by a character on the screen
-	def __init__(self, x, y, char, name, color, blocks=False, fighter=None, ai=None):
+	def __init__(self, x, y, char, name, color, blocks=False, fighter=None, ai=None, item=None):
 		self.x = x
 		self.y = y
 		self.char = char
@@ -132,7 +156,9 @@ class Object:
 		self.ai = ai
 		if self.ai:
 			self.ai.owner = self
-
+		self.item = item
+		if self.item:
+			self.item.owner = self
 	def send_to_back(self):
 		global objects
 		objects.remove(self)
@@ -251,6 +277,18 @@ def make_map():
 			rooms.append(new_room)
 			num_rooms += 1
 
+def closest_monster(max_range):
+	closest_enemy = None
+	closest_dist = max_range + 1
+
+	for object in objects:
+		if object.fighter and not object == player and libtcod.map_is_in_fov(fov_map, object.x, object.y):
+			dist = player.distance_to(object)
+			if dist < closest_dist:
+				closest_enemy = object
+				closest_dist = dist
+	return closest_enemy
+
 def create_room(room):
 	global map
 	#go through the tiles in the rectangle and make them passable
@@ -343,14 +381,29 @@ def render_all():
 	libtcod.console_blit(panel,0,0, SCREEN_WIDTH, PANEL_HEIGHT, 0, 0, PANEL_Y)
 	libtcod.console_blit(con, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, 0)
 
+def cast_heal():
+	if player.fighter.hp < player.fighter.max_hp:
+		player.fighter.hp += 10
+		if player.fighter.hp > player.fighter.max_hp:
+			player.fighter.hp == player.fighter.max_hp
+
+def cast_lightning():
+	#find closest enemy inside max range and damage it
+	monster = closest_monster(LIGHTNING_RANGE)
+	if monster is None: #no enemy found within max range
+		message('No emeny is close enough to strike', libtcod.red)
+		return 'cancelled'
+	message('A lightning bolt strikes the ' + monster.name + 'with a thunderous boom!  the damae is ' + str(LIGTHNING_DAMAGE) + ' hit points.', libtcod.light_blue)
+	monster.fighter.take_damage(LIGHTNING_DAMAGE)
+
 def place_objects(room):
 	#choose random number of monsters
 	num_monsters = libtcod.random_get_int(0,0,MAX_ROOM_MONSTERS)
 
 	for i in range(num_monsters):
 		#choose random spot for this monster
-		x = libtcod.random_get_int(0, room.x1, room.x2)
-		y = libtcod.random_get_int(0, room.y1, room.y2)
+		x = libtcod.random_get_int(0, room.x1+1, room.x2-1)
+		y = libtcod.random_get_int(0, room.y1+1, room.y2-1)
 		if not is_blocked(x,y):
 			if libtcod.random_get_int(0,0,100) < 80:
 				#80% chance of orc
@@ -364,6 +417,29 @@ def place_objects(room):
 				monster = Object(x, y,'T', 'Troll', libtcod.darker_green, blocks=True, fighter=fighter_component, ai=ai_component)
 
 			objects.append(monster)
+	
+
+	num_items = libtcod.random_get_int(0,0,MAX_ROOM_ITEMS)
+
+	for i in range(num_items):
+		x = libtcod.random_get_int(0,room.x1+1, room.x2-1)
+		y = libtcod.random_get_int(0,room.y1+1, room.y2-1)
+
+		if not is_blocked(x,y):
+			dice = libtcod.random_get_int(0,0,100)
+		
+			if dice < 70:
+				#create a healing potion
+				item_component = Item(use_function=cast_heal)
+				item = Object(x,y, '!', 'healing potion', libtcod.violet, item=item_component)
+				objects.append(item)
+				item.send_to_back
+			else:
+				#create a lightning scroll
+				item_component = Item(use_function=cast_lightning)
+				item = Object(x, y, '#', 'scroll of lightning bolt', libtcod.light_yellow, item=item_component)
+				objects.append(item)
+				item.send_to_back
 
 def handle_keys():
 	"""Handle_keys reads keypresses from the player while in console mode"""
@@ -400,6 +476,16 @@ def handle_keys():
 			player_move_or_attack(1,0)
 			fov_recompute = True
 		else:
+			#test for other keys
+			key_char = chr(key.c)
+
+			if key_char == 'g':
+				#pick up an item
+				for object in objects: #look for item in players tile
+					if object.x == player.x and object.y == player.y and object.item:
+						object.item.pick_up()
+						break
+
 			return 'didnt-take-turn'
 
 def get_names_under_mouse():
@@ -486,6 +572,7 @@ fov_recompute = False
 
 panel = libtcod.console_new(SCREEN_WIDTH, PANEL_HEIGHT)
 
+inventory = []
 game_msgs = []
 
 message("Welcome stranger!  Prepare to perish in the Tombs of the Ancient Kings.", libtcod.red)
