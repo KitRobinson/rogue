@@ -464,9 +464,9 @@ def cast_lightning():
 
 def cast_confuse():
 	#confuse the closest monster
-	monster = closest_monster(CONFUSE_RANGE)
+	message('left click an enemy to cast confuse, or right click to cancel')
+	monster = target_monster(CONFUSE_RANGE)
 	if monster is None: #no enemy in range
-		message('No enemy is close enough to confuse.', libtcod.red)
 		return 'cancelled'
 	else:
 		old_ai = monster.ai
@@ -512,13 +512,13 @@ def place_objects(room):
 				item = Object(x,y, '!', 'healing potion', libtcod.violet, item=item_component)
 				objects.append(item)
 				item.send_to_back
-			elif dice < 74:	
+			elif dice < 73:	
 				#create a confuse scroll
 				item_component = Item(use_function=cast_confuse)
 				item = Object(x, y, '#', 'scroll of confusion', libtcod.orange, item=item_component)
 				objects.append(item)
 				item.send_to_back
-			elif dice < 98:
+			elif dice < 86:
 				#fireball scroll
 				item_component = Item(use_function=cast_fireball)
 				item = Object(x, y, '#', 'scroll of fireball', libtcod.dark_red, item=item_component)
@@ -628,6 +628,13 @@ def handle_keys():
 
 			return 'didnt-take-turn'
 
+def target_monster(max_range=None):
+	while True:
+		(x,y) = target_tile(max_range)
+		if x is None: return None
+		for obj in objects:
+			if obj.x == x and obj.y == y and obj.fighter and obj != player:
+				return obj
 def target_tile(max_range=None):
 	#return the position of a tile left-click in players FOV, optionally limited by range, or None,None if rieght clicked
 	global key, mouse
